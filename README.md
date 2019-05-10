@@ -6,12 +6,11 @@ A really simple return value based error checking library. Focused on no memory 
 Example
 -------
 ```cpp
-#include <iostream>
 #include "zpp/maybe.h"
+#include <iostream>
 
 namespace my_namespace
 {
-
 // Use arbitrary error enumeration whose underlying type is int.
 enum class my_error : int
 {
@@ -22,22 +21,23 @@ enum class my_error : int
 
 // Define this function which returns the error descriptions and
 // the error category name.
-const zpp::error_category & category(my_error)
+inline const zpp::error_category & category(my_error)
 {
-    return zpp::make_error_category<my_error>("my_category",
-        [](auto code) -> std::string_view {
-            switch (code) {
+    constexpr static auto error_category =
+        zpp::make_error_category<my_error>(
+            "my_category", [](auto code) -> std::string_view {
+                switch (code) {
                 case my_error::success:
-                    return {};
+                    return zpp::error::no_error;
                 case my_error::something_bad:
                     return "Something bad happened.";
                 case my_error::something_really_bad:
                     return "Something really bad happened.";
                 default:
                     return "Unknown error occurred.";
-            }
-        }
-    );
+                }
+            });
+    return error_category;
 }
 
 // Example of function that supposed to return an integer but
@@ -53,21 +53,27 @@ zpp::maybe<int> foo(bool value)
     return 1337;
 }
 
+// Change this to observe a different behavior.
+bool is_success = true;
+
 // This function is going to call a function that fails and
 // check the error.
 void bar()
 {
-    // Change this to observe a different behavior.
-    bool is_success = false;
-
     if (auto result = foo(is_success)) {
         // Success path.
         std::cout << "Success path: value is '" << result.value() << "'\n";
     } else {
         // Fail path.
         std::cout << "Error path: error is '" << result.error().code()
-            << "', '" << result.error().message() << "'\n";
+                  << "', '" << result.error().message() << "'\n";
     }
 }
-} // my_namespace
+
+extern "C" int main()
+{
+    bar();
+}
+
+} // namespace my_namespace
 ```

@@ -1,14 +1,15 @@
 #pragma once
-#include <variant>
-#include <type_traits>
 #include <string_view>
+#include <type_traits>
+#include <utility>
+#include <variant>
 
 namespace zpp
 {
-
 /**
  * Returns the error category for a given error code enumeration type,
- * using an argument dependent lookup of a user implemented category function.
+ * using an argument dependent lookup of a user implemented category
+ * function.
  */
 template <typename ErrorCode>
 decltype(auto) category()
@@ -17,7 +18,7 @@ decltype(auto) category()
 }
 
 /**
- * The error category which responsible for translating error codes to 
+ * The error category which responsible for translating error codes to
  * error messages.
  */
 class error_category
@@ -26,14 +27,14 @@ public:
     /**
      * Returns the error category name.
      */
-    virtual std::string_view name() const = 0;
+    virtual std::string_view name() const noexcept = 0;
 
     /**
      * Return the error message for a given error code.
-     * Return an empty string view for a success code.
-     * All other codes must return non empty view.
+     * Return an zpp::error::no_error for a success code.
+     * All other codes must return non empty string views.
      */
-    virtual std::string_view message(int code) const = 0;
+    virtual std::string_view message(int code) const noexcept = 0;
 
 protected:
     /**
@@ -43,30 +44,33 @@ protected:
 };
 
 /**
- * Creates an error category, 
+ * Creates an error category, message translation
+ * must not throw.
  */
 template <typename ErrorCode, typename Messages>
-const auto & make_error_category(std::string_view name, Messages && messages)
+constexpr auto make_error_category(std::string_view name,
+                                   Messages && messages)
 {
     // Create a category with the name and messages.
-    static class category : public zpp::error_category,
-        private std::remove_reference_t<Messages>
+    class category : public zpp::error_category,
+                     private std::remove_reference_t<Messages>
     {
     public:
-        category(std::string_view name, Messages && messages) :
-            std::remove_reference_t<Messages>(std::forward<Messages>(messages)),
+        constexpr category(std::string_view name, Messages && messages) :
+            std::remove_reference_t<Messages>(
+                std::forward<Messages>(messages)),
             m_name(name)
         {
         }
 
-        std::string_view name() const override
+        std::string_view name() const noexcept override
         {
             return m_name;
         }
 
-        std::string_view message(int code) const override
+        std::string_view message(int code) const noexcept override
         {
-            return this->operator()(ErrorCode{ code });
+            return this->operator()(ErrorCode{code});
         }
 
     private:
@@ -77,6 +81,13 @@ const auto & make_error_category(std::string_view name, Messages && messages)
     return category;
 }
 
+/**
+ * This namespace is a workaround allowing us to delay the introduction of
+ * 'error' in this scope to avoid conflict with language rules in class
+ * 'maybe'.
+ */
+namespace error_detail
+{
 /**
  * Represents an error to be initialized from an error code
  * enumeration.
@@ -92,23 +103,25 @@ const auto & make_error_category(std::string_view name, Messages && messages)
  *     something_bad = 1,
  *     something_really_bad = 2,
  * };
- * 
- * const zpp::error_category & category(my_error)
+ *
+ * inline const zpp::error_category & category(my_error)
  * {
- *     return zpp::make_error_category<my_error>("my_category",
- *         [](auto code) -> std::string_view {
- *             switch (code) {
- *                 case my_error::success:
- *                     return {};
- *                 case my_code:something_bad:
- *                     return "Something bad happened.";
- *                 case my_error::something_really_bad:
- *                     return "Something really bad happened.";
- *                 default:
- *                     return "Unknown error occurred.";
+ *     constexpr static auto error_category =
+ *         zpp::make_error_category<my_error>("my_category",
+ *             [](auto code) -> std::string_view {
+ *                 switch (code) {
+ *                     case my_error::success:
+ *                         return zpp::error::no_error;
+ *                     case my_code:something_bad:
+ *                         return "Something bad happened.";
+ *                     case my_error::something_really_bad:
+ *                         return "Something really bad happened.";
+ *                     default:
+ *                         return "Unknown error occurred.";
+ *                 }
  *             }
- *         }
- *     );
+ *         );
+ *     return error_category;
  * }
  * } // my_namespace
  * ~~~
@@ -122,9 +135,10 @@ public:
     error() = delete;
 
     /**
-     * Constructs an error from an error code enumeration, the category
-     * is looked by using argument dependent lookup on a function named 'category'
-     * that receives the error code enumeration value.
+     * Constructs an error from an error code enumeration, the
+     * category is looked by using argument dependent lookup on a
+     * function named 'category' that receives the error code
+     * enumeration value.
      */
     template <typename ErrorCode>
     error(ErrorCode error_code) :
@@ -134,8 +148,8 @@ public:
     }
 
     /**
-     * Constructs an error from an error code enumeration, the category
-     * is given explicitly in this overload.
+     * Constructs an error from an error code enumeration, the
+     * category is given explicitly in this overload.
      */
     template <typename ErrorCode>
     error(ErrorCode error_code, const error_category & category) :
@@ -176,6 +190,11 @@ public:
         return message().empty();
     }
 
+    /**
+     * No error message value.
+     */
+    static constexpr std::string_view no_error{};
+
 private:
     /**
      * The error category.
@@ -187,17 +206,18 @@ private:
      */
     int m_code{};
 };
+} // namespace error_detail
 
 /**
  * Represents a value-or-error object.
  * An object of this type may have a value stored inside or an error.
- * The error is represented as zpp::error, and can be queried accessed 
+ * The error is represented as zpp::error, and can be queried accessed
  * using the 'error' member function.
  * Example:
  * ~~~
- * // After defining my_error and the category of it as described 
+ * // After defining my_error and the category of it as described
  * // in the sample above for the error class.
- * 
+ *
  * zpp::maybe<int> foo(bool value)
  * {
  *     if (!value) {
@@ -209,30 +229,33 @@ private:
  *     return 1337;
  * }
  *
+ * // Change this value to observe different behavior.
+ * bool is_success = true;
+ *
  * void bar()
  * {
- *     // Change this value to observe different behavior.
- *     bool is_success = true;
- *
  *     if (auto result = foo(is_success)) {
  *         // Success path.
- *         std::cout << "Success path: value is '" << result.value() << "'\n";
+ *         std::cout << "Success path: value is '"
+ *             << result.value() << "'\n";
  *     } else {
  *         // Fail path.
- *         std::cout << "Error path: error is '" << result.error().code()
- *             << "', '" << result.error().message() << "'\n";
+ *         std::cout << "Error path: error is '"
+ *             << result.error().code()
+ *             << "', '"
+ *             << result.error().message() << "'\n";
  *     }
- * } 
+ * }
  * ~~~
  */
 template <typename Type>
-class maybe : private std::variant<Type, error>
+class maybe : private std::variant<Type, error_detail::error>
 {
 public:
     /**
      * The base class.
      */
-    using base = std::variant<Type, error>;
+    using base = std::variant<Type, error_detail::error>;
 
     /**
      * The type of value.
@@ -242,7 +265,7 @@ public:
     /**
      * Alias to the error type.
      */
-    using error_type = error;
+    using error_type = error_detail::error;
 
     /**
      * Disable default construction.
@@ -252,7 +275,7 @@ public:
     /**
      * Inherit base class constructors.
      */
-    using std::variant<Type, error>::variant;
+    using std::variant<Type, error_type>::variant;
 
     /**
      * Returns the stored error.
@@ -282,7 +305,7 @@ public:
     }
 
     /**
-     * Returns false if there is a stored error, else, there 
+     * Returns false if there is a stored error, else, there
      * is a stored value and the return value is true.
      */
     explicit operator bool() const
@@ -291,4 +314,9 @@ public:
     }
 };
 
-} // zpp
+/**
+ * Introduce error here instead of before 'maybe'.
+ */
+using error = error_detail::error;
+
+} // namespace zpp
