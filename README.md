@@ -23,20 +23,21 @@ enum class my_error : int
 // the error category name.
 inline const zpp::error_category & category(my_error)
 {
-    constexpr static auto error_category =
-        zpp::make_error_category<my_error>(
-            "my_category", [](auto code) -> std::string_view {
-                switch (code) {
-                case my_error::success:
-                    return zpp::error::no_error;
-                case my_error::something_bad:
-                    return "Something bad happened.";
-                case my_error::something_really_bad:
-                    return "Something really bad happened.";
-                default:
-                    return "Unknown error occurred.";
-                }
-            });
+    constexpr static auto error_category = zpp::make_error_category(
+        "my_category",
+        my_error::success,
+        [](auto code) -> std::string_view {
+            switch (code) {
+            case my_error::success:
+                return zpp::error::no_error;
+            case my_error::something_bad:
+                return "Something bad happened.";
+            case my_error::something_really_bad:
+                return "Something really bad happened.";
+            default:
+                return "Unknown error occurred.";
+            }
+        });
     return error_category;
 }
 
@@ -54,7 +55,7 @@ zpp::maybe<int> foo(bool value)
 }
 
 // Change this to observe a different behavior.
-bool is_success = true;
+bool is_success = false;
 
 // This function is going to call a function that fails and
 // check the error.

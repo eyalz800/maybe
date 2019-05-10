@@ -31,32 +31,62 @@ public:
 
     /**
      * Return the error message for a given error code.
-     * Return an zpp::error::no_error for a success code.
+     * For success codes, it is unspecified what value is returned.
+     * For convienience, you may return zpp::error::no_error for success.
      * All other codes must return non empty string views.
      */
     virtual std::string_view message(int code) const noexcept = 0;
 
+    /**
+     * Returns true if success code, else false.
+     */
+    bool success(int code) const
+    {
+        return code == m_success_code;
+    }
+
 protected:
+    /**
+     * Creates an error category whose success code is 'success_code'.
+     */
+    constexpr error_category(int success_code) :
+        m_success_code(success_code)
+    {
+    }
+
     /**
      * Destroys the error category.
      */
     ~error_category() = default;
+
+private:
+    /**
+     * The success code.
+     */
+    int m_success_code{};
 };
 
 /**
- * Creates an error category, message translation
- * must not throw.
+ * Creates an error category, whose name and success
+ * code are specified, as well as a message translation
+ * logic that returns the error message for every error code.
+ * Note: message translation must not throw.
  */
 template <typename ErrorCode, typename Messages>
 constexpr auto make_error_category(std::string_view name,
+                                   ErrorCode success_code,
                                    Messages && messages)
 {
     // Create a category with the name and messages.
-    class category : public zpp::error_category,
+    class category : public error_category,
                      private std::remove_reference_t<Messages>
     {
     public:
-        constexpr category(std::string_view name, Messages && messages) :
+        constexpr category(std::string_view name,
+                           ErrorCode success_code,
+                           Messages && messages) :
+            error_category(
+                std::underlying_type_t<ErrorCode>(success_code)),
             std::remove_reference_t<Messages>(
                 std::forward<Messages>(messages)),
             m_name(name)
@@ -75,7 +105,7 @@ constexpr auto make_error_category(std::string_view name,
 
     private:
         std::string_view m_name;
-    } category(name, std::forward<Messages>(messages));
+    } category(name, success_code, std::forward<Messages>(messages));
 
     // Return the category.
     return category;
@@ -107,7 +137,7 @@ namespace error_detail
  * inline const zpp::error_category & category(my_error)
  * {
  *     constexpr static auto error_category =
- *         zpp::make_error_category<my_error>("my_category",
+ *         zpp::make_error_category("my_category", my_error::success,
  *             [](auto code) -> std::string_view {
  *                 switch (code) {
  *                     case my_error::success:
@@ -175,7 +205,9 @@ public:
     }
 
     /**
-     * Returns the error message.
+     * Returns the error message. Calling this once
+     * a success error is implementation defined according
+     * to the error category.
      */
     std::string_view message() const
     {
@@ -187,7 +219,7 @@ public:
      */
     explicit operator bool() const
     {
-        return message().empty();
+        return m_category->success(m_code);
     }
 
     /**
