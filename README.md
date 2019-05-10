@@ -11,6 +11,9 @@ Example
 
 namespace my_namespace
 {
+// Change this to observe a different behavior.
+bool is_success = false;
+
 // Use arbitrary error enumeration whose underlying type is int.
 enum class my_error : int
 {
@@ -19,8 +22,7 @@ enum class my_error : int
     something_really_bad = 2,
 };
 
-// Define this function which returns the error descriptions and
-// the error category name.
+// Define the error category and message translation.
 inline const zpp::error_category & category(my_error)
 {
     constexpr static auto error_category = zpp::make_error_category(
@@ -41,8 +43,8 @@ inline const zpp::error_category & category(my_error)
     return error_category;
 }
 
-// Example of function that supposed to return an integer but
-// fails sometimes with an error.
+// Example of function that wants to return an 'int' but
+// can fail.
 zpp::maybe<int> foo(bool value)
 {
     if (!value) {
@@ -54,26 +56,48 @@ zpp::maybe<int> foo(bool value)
     return 1337;
 }
 
-// Change this to observe a different behavior.
-bool is_success = false;
-
-// This function is going to call a function that fails and
-// check the error.
-void bar()
+// This function just returns an error.
+zpp::error bar(bool value)
 {
+    if (!value) {
+        return my_error::something_really_bad;
+    }
+
+    return my_error::success;
+}
+
+// Call foo and check error.
+void baz1()
+{
+    // Call foo.
     if (auto result = foo(is_success)) {
         // Success path.
         std::cout << "Success path: value is '" << result.value() << "'\n";
     } else {
-        // Fail path.
+        // Error path.
         std::cout << "Error path: error is '" << result.error().code()
                   << "', '" << result.error().message() << "'\n";
     }
 }
 
+// Call bar and check error.
+void baz2()
+{
+    // Call bar.
+    if (auto error = bar(is_success); !error) {
+        // Error path.
+        std::cout << "Error path: error is '" << error.code()
+                  << "', '" << error.message() << "'\n";
+    } else {
+        // Success path.
+        std::cout << "Success path: code is '" << error.code() << "'\n";
+    }    
+}
+
 extern "C" int main()
 {
-    bar();
+    baz1();
+    baz2();
 }
 
 } // namespace my_namespace

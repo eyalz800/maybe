@@ -205,7 +205,7 @@ public:
     }
 
     /**
-     * Returns the error message. Calling this once
+     * Returns the error message. Calling this on
      * a success error is implementation defined according
      * to the error category.
      */
@@ -250,6 +250,10 @@ private:
  * // After defining my_error and the category of it as described
  * // in the sample above for the error class.
  *
+ * // Change this value to observe different behavior.
+ * bool is_success = true;
+ *
+ * // Example of using 'maybe'.
  * zpp::maybe<int> foo(bool value)
  * {
  *     if (!value) {
@@ -261,21 +265,43 @@ private:
  *     return 1337;
  * }
  *
- * // Change this value to observe different behavior.
- * bool is_success = true;
+ * // Example of using plain error code.
+ * zpp::error bar(bool value)
+ * {
+ *     if (!value) {
+ *         return my_error::something_really_bad;
+ *     }
+ * 
+ *     return my_error::success;
+ * }
  *
- * void bar()
+ * // Call foo and check error.
+ * void baz1()
  * {
  *     if (auto result = foo(is_success)) {
  *         // Success path.
  *         std::cout << "Success path: value is '"
  *             << result.value() << "'\n";
  *     } else {
- *         // Fail path.
+ *         // Error path.
  *         std::cout << "Error path: error is '"
- *             << result.error().code()
- *             << "', '"
+ *             << result.error().code() << "', '"
  *             << result.error().message() << "'\n";
+ *     }
+ * }
+ *
+ * // Call bar and check error.
+ * void baz2()
+ * {
+ *     if (auto error = bar(is_success); !error) {
+ *         // Error path.
+ *         std::cout << "Error path: error is '"
+ *             << error.code() << "', '"
+ *             << error.message() << "'\n";
+ *     } else {
+ *         // Success path.
+ *         std::cout << "Success path: code is '"
+ *             << error.code() << "'\n";
  *     }
  * }
  * ~~~
